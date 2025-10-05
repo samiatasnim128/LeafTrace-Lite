@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeafTrace Lite Demo</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 300px;
+            background-color: #f0f4f8;
+            padding: 1rem;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab-button {
+            padding: 0.5rem 1rem;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            color: #555;
+        }
+        .tab-button.active {
+            color: #0077cc;
+            border-bottom: 2px solid #0077cc;
+        }
+        .tab-content {
+            display: none;
+            padding: 0.5rem 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .connected {
+            background-color: #4caf50;
+        }
+        .disconnected {
+            background-color: #f44336;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card h3 {
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            background-color: #0077cc;
+            color: white;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .btn:hover {
+            background-color: #005fa3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .btn-success {
+            background-color: #28a745;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        .list-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+        }
+        .list-item:hover {
+            background-color: #f8f9fa;
+        }
+        .list-item.active {
+            background-color: #e9f5ff;
+        }
+        .coordinates {
+            font-family: monospace;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+        .alert {
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .header {
+            background-color: #0077cc;
+            color: white;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        .recording-indicator {
+            display: flex;
+            align-items: center;
+            color: #dc3545;
+            font-weight: bold;
+            margin-top: 0.5rem;
+        }
+        .recording-dot {
+            width: 10px;
+            height: 10px;
+            background-color: #dc3545;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2 style="margin-bottom: 1rem;">LeafTrace Lite</h2>
+        
+        <div class="tab-buttons">
+            <button class="tab-button active" data-tab="connection">Connection</button>
+            <button class="tab-button" data-tab="tracks">Tracks</button>
+            <button class="tab-button" data-tab="geofences">Geofences</button>
+            <button class="tab-button" data-tab="help">Help</button>
+        </div>
+        
+        <div class="tab-content active" id="connection-tab">
+            <div class="card">
+                <h3>GPS Source</h3>
+                <button id="start-simulator" class="btn">Start Simulator</button>
+                <button id="stop-simulator" class="btn btn-secondary" disabled>Stop Simulator</button>
+            </div>
+            
+            <div class="card">
+                <h3>Current Position</h3>
+                <div class="connection-status">
+                    <div id="status-indicator" class="status-indicator disconnected"></div>
+                    <span id="connection-status">Disconnected</span>
+                </div>
+                <div id="current-position">
+                    <div class="coordinates">Latitude: --</div>
+                    <div class="coordinates">Longitude: --</div>
+                    <div class="coordinates">Speed: -- km/h</div>
+                    <div class="coordinates">Heading: -- °</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Track Recording</h3>
+                <button id="start-recording" class="btn" disabled>Start Recording</button>
+                <button id="stop-recording" class="btn btn-danger" disabled>Stop Recording</button>
+                <div id="recording-status" style="display: none;">
+                    <div class="recording-indicator">
+                        <div class="recording-dot"></div>
+                        <span>Recording...</span>
+                    </div>
+                    <div class="coordinates">Duration: <span id="recording-duration">00:00:00</span></div>
+                    <div class="coordinates">Distance: <span id="recording-distance">0.00</span> km</div>
+                    <div class="coordinates">Points: <span id="recording-points">0</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="tracks-tab">
+            <div class="card">
+                <h3>Saved Tracks</h3>
+                <div id="tracks-list">
+                    <div class="list-item">No tracks saved</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Track Actions</h3>
+                <button id="show-track" class="btn" disabled>Show on Map</button>
+                <button id="hide-track" class="btn btn-secondary" disabled>Hide from Map</button>
+                <button id="delete-track" class="btn btn-danger" disabled>Delete Track</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="geofences-tab">
+            <div class="card">
+                <h3>Geofence Tools</h3>
+                <button id="create-geofence" class="btn">Create Geofence</button>
+                <button id="cancel-geofence" class="btn btn-secondary" disabled>Cancel</button>
+            </div>
+            <div class="card">
+                <h3>Saved Geofences</h3>
+                <div id="geofences-list">
+                    <div class="list-item">No geofences saved</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Geofence Actions</h3>
+                <button id="show-geofence" class="btn" disabled>Show on Map</button>
+                <button id="hide-geofence" class="btn btn-secondary" disabled>Hide from Map</button>
+                <button id="delete-geofence" class="btn btn-danger" disabled>Delete Geofence</button>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="help-tab">
+            <div class="card">
+                <h3>About LeafTrace Lite</h3>
+                <p>A lightweight GPS tracking application for outdoor activities.</p>
+                <p>This demo showcases the core functionality using simulated GPS data.</p>
+            </div>
+            <div class="card">
+                <h3>How to Use</h3>
+                <p><strong>1.</strong> Start the simulator to generate GPS data</p>
+                <p><strong>2.</strong> Record tracks by clicking Start Recording</p>
+                <p><strong>3.</strong> Create geofences using the Create Geofence button</p>
+                <p><strong>4.</strong> View and manage saved tracks and geofences in their respective tabs</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="header">
+            <h1>GPS Tracking Dashboard</h1>
+            <div>
+                <span id="demo-indicator">DEMO MODE</span>
+            </div>
+        </div>
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    
+    <script>
+        // Map initialization
+        const map = L.map('map').setView([51.505, -0.09], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Current position marker
+        let currentPositionMarker = null;
+        let currentPositionCircle = null;
+        
+        // Track variables
+        let isRecording = false;
+        let currentTrack = [];
+        let trackPolyline = null;
+        let recordingStartTime = null;
+        let recordingInterval = null;
+        let savedTracks = [];
+        
+        // Geofence variables
+        let geofences = [];
+        let drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        
+        // Drawing controls
+        const drawControl = new L.Control.Draw({
+            draw: {
+                marker: false,
+                circlemarker: false,
+                polyline: false,
+                rectangle: true,
+                circle: true,
+                polygon: {
+                    allowIntersection: false,
+                    showArea: true
+                }
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: false
+            }
+        });
+        
+        // Tab switching
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                
+                button.classList.add('active');
+                document.getElementById(`${button.dataset.tab}-tab`).classList.add('active');
+            });
+        });
+        
+        // Simulator functions
+        let simulatorInterval = null;
+        let simulationPath = generateCircularRoute(51.505, -0.09, 0.01, 20);
+        let simulationIndex = 0;
+        
+        document.getElementById('start-simulator').addEventListener('click', () => {
+            startSimulator();
+            document.getElementById('start-simulator').disabled = true;
+            document.getElementById('stop-simulator').disabled = false;
+            document.getElementById('start-recording').disabled = false;
+        });
+        
+        document.getElementById('stop-simulator').addEventListener('click', () => {
+            stopSimulator();
+            document.getElementById('start-simulator').disabled = false;
+            document.getElementById('stop-simulator').disabled = true;
+            document.getElementById('start-recording').disabled = true;
+            document.getElementById('stop-recording').disabled = true;
+        });
+        
+        // Track recording functions
+        document.getElementById('start-recording').addEventListener('click', () => {
+            startRecording();
+            document.getElementById('start-recording').disabled = true;
+            document.getElementById('stop-recording').disabled = false;
+        });
+        
+        document.getElementById('stop-recording').addEventListener('click', () => {
+            stopRecording();
+            document.getElementById('start-recording').disabled = false;
+            document.getElementById('stop-recording').disabled = true;
+        });
+        
+        // Geofence functions
+        document.getElementById('create-geofence').addEventListener('click', () => {
+            map.addControl(drawControl);
+            document.getElementById('create-geofence').disabled = true;
+            document.getElementById('cancel-geofence').disabled = false;
+        });
+        
+        document.getElementById('cancel-geofence').addEventListener('click', () => {
+            map.removeControl(drawControl);
+            document.getElementById('create-geofence').disabled = false;
+            document.getElementById('cancel-geofence').disabled = true;
+        });
+        
+        // Track management
+        document.getElementById('show-track').addEventListener('click', () => {
+            const selectedTrack = document.querySelector('#tracks-list .list-item.active');
+            if (selectedTrack) {
+                const trackId = selectedTrack.dataset.id;
+                const track = savedTracks.find(t => t.id === trackId);
+                if (track) {
+                    showTrackOnMap(track);
+                }
+            }
+        });
+        
+        document.getElementById('hide-track').addEventListener('click', () => {
+            const selectedTrack = document.querySelector('#tracks-list .list-item.active');
+            if (selectedTrack) {
+                const trackId = selectedTrack.dataset.id;
+                hideTrackFromMap(trackId);
+            }
+        });
+        
+        document.getElementById('delete-track').addEventListener('click', () => {
+            const selectedTrack = document.querySelector('#tracks-list .list-item.active');
+            if (selectedTrack) {
+                const trackId = selectedTrack.dataset.id;
+                deleteTrack(trackId);
+            }
+        });
+        
+        // Geofence management
+        document.getElementById('show-geofence').addEventListener('click', () => {
+            const selectedGeofence = document.querySelector('#geofences-list .list-item.active');
+            if (selectedGeofence) {
+                const geofenceId = selectedGeofence.dataset.id;
+                const geofence = geofences.find(g => g.id === geofenceId);
+                if (geofence) {
+                    showGeofenceOnMap(geofence);
+                }
+            }
+        });
+        
+        document.getElementById('hide-geofence').addEventListener('click', () => {
+            const selectedGeofence = document.querySelector('#geofences-list .list-item.active');
+            if (selectedGeofence) {
+                const geofenceId = selectedGeofence.dataset.id;
+                hideGeofenceFromMap(geofenceId);
+            }
+        });
+        
+        document.getElementById('delete-geofence').addEventListener('click', () => {
+            const selectedGeofence = document.querySelector('#geofences-list .list-item.active');
+            if (selectedGeofence) {
+                const geofenceId = selectedGeofence.dataset.id;
+                deleteGeofence(geofenceId);
+            }
+        });
+        
+        // Map events
+        map.on(L.Draw.Event.CREATED, (event) => {
+            const layer = event.layer;
+            drawnItems.addLayer(layer);
+            
+            const geofenceId = 'geofence-' + Date.now();
+            let geofence = {
+                id: geofenceId,
+                name: `Geofence ${geofences.length + 1}`,
+                type: event.layerType,
+                layer: layer,
+                visible: true
+            };
+            
+            if (event.layerType === 'circle') {
+                geofence.center = layer.getLatLng();
+                geofence.radius = layer.getRadius();
+            } else if (event.layerType === 'polygon' || event.layerType === 'rectangle') {
+                geofence.points = layer.getLatLngs()[0];
+            }
+            
+            geofences.push(geofence);
+            updateGeofencesList();
+            
+            map.removeControl(drawControl);
+            document.getElementById('create-geofence').disabled = false;
+            document.getElementById('cancel-geofence').disabled = true;
+        });
+        
+        // Helper functions
+        function startSimulator() {
+            document.getElementById('status-indicator').classList.remove('disconnected');
+            document.getElementById('status-indicator').classList.add('connected');
+            document.getElementById('connection-status').textContent = 'Connected (Simulator)';
+            
+            simulatorInterval = setInterval(() => {
+                simulationIndex = (simulationIndex + 1) % simulationPath.length;
+                const position = simulationPath[simulationIndex];
+                const nextPosition = simulationPath[(simulationIndex + 1) % simulationPath.length];
+                
+                // Calculate heading based on current and next position
+                const heading = calculateHeading(position.lat, position.lng, nextPosition.lat, nextPosition.lng);
+                
+                // Calculate speed (simulated)
+                const speed = 15 + Math.random() * 5; // 15-20 km/h
+                
+                updateCurrentPosition(position.lat, position.lng, speed, heading);
+                
+                if (isRecording) {
+                    addPointToTrack(position.lat, position.lng);
+                }
+                
+                // Check geofence alerts
+                checkGeofenceAlerts(position.lat, position.lng);
+            }, 1000);
+        }
+        
+        function stopSimulator() {
+            clearInterval(simulatorInterval);
+            document.getElementById('status-indicator').classList.remove('connected');
+            document.getElementById('status-indicator').classList.add('disconnected');
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            
+            if (isRecording) {
+                stopRecording();
+            }
+        }
+        
+        function updateCurrentPosition(lat, lng, speed, heading) {
+            document.getElementById('current-position').innerHTML = `
+                <div class="coordinates">Latitude: ${lat.toFixed(6)}</div>
+                <div class="coordinates">Longitude: ${lng.toFixed(6)}</div>
+                <div class="coordinates">Speed: ${speed.toFixed(1)} km/h</div>
+                <div class="coordinates">Heading: ${heading.toFixed(0)} °</div>
+            `;
+            
+            if (currentPositionMarker) {
+                currentPositionMarker.setLatLng([lat, lng]);
+                currentPositionCircle.setLatLng([lat, lng]);
+            } else {
+                currentPositionMarker = L.marker([lat, lng]).addTo(map);
+                currentPositionCircle = L.circle([lat, lng], {
+                    color: 'blue',
+                    fillColor: '#30f',
+                    fillOpacity: 0.2,
+                    radius: 50
+                }).addTo(map);
+            }
+            
+            map.panTo([lat, lng]);
+        }
+        
+        function startRecording() {
+            isRecording = true;
+            currentTrack = [];
+            recordingStartTime = Date.now();
+            
+            if (trackPolyline) {
+                map.removeLayer(trackPolyline);
+            }
+            
+            trackPolyline = L.polyline([], {
+                color: 'red',
+                weight: 4
+            }).addTo(map);
+            
+            document.getElementById('recording-status').style.display = 'block';
+            document.getElementById('recording-points').textContent = '0';
+            document.getElementById('recording-distance').textContent = '0.00';
+            
+            recordingInterval = setInterval(updateRecordingStats, 1000);
+        }
+        
+        function stopRecording() {
+            if (!isRecording) return;
+            
+            isRecording = false;
+            clearInterval(recordingInterval);
+            document.getElementById('recording-status').style.display = 'none';
+            
+            if (currentTrack.length > 0) {
+                const track = {
+                    id: 'track-' + Date.now(),
+                    name: `Track ${savedTracks.length + 1}`,
+                    points: [...currentTrack],
+                    startTime: recordingStartTime,
+                    endTime: Date.now(),
+                    distance: calculateTrackDistance(currentTrack),
+                    visible: true,
+                    polyline: trackPolyline
+                };
+                
+                savedTracks.push(track);
+                updateTracksList();
+            } else {
+                if (trackPolyline) {
+                    map.removeLayer(trackPolyline);
+                    trackPolyline = null;
+                }
+            }
+        }
+        
+        function addPointToTrack(lat, lng) {
+            const point = { lat, lng, timestamp: Date.now() };
+            currentTrack.push(point);
+            
+            if (trackPolyline) {
+                trackPolyline.addLatLng([lat, lng]);
+            }
+            
+            document.getElementById('recording-points').textContent = currentTrack.length;
+            document.getElementById('recording-distance').textContent = calculateTrackDistance(currentTrack).toFixed(2);
+        }
+        
+        function updateRecordingStats() {
+            if (!isRecording) return;
+            
+            const duration = Date.now() - recordingStartTime;
+            document.getElementById('recording-duration').textContent = formatDuration(duration);
+        }
+        
+        function updateTracksList() {
+            const tracksList = document.getElementById('tracks-list');
+            
+            if (savedTracks.length === 0) {
+                tracksList.innerHTML = '<div class="list-item">No tracks saved</div>';
+                document.getElementById('show-track').disabled = true;
+                document.getElementById('hide-track').disabled = true;
+                document.getElementById('delete-track').disabled = true;
+                return;
+            }
+            
+            tracksList.innerHTML = '';
+            savedTracks.forEach(track => {
+                const trackItem = document.createElement('div');
+                trackItem.className = 'list-item';
+                trackItem.dataset.id = track.id;
+                trackItem.innerHTML = `
+                    <div>${track.name}</div>
+                    <div style="font-size: 0.8rem; color: #666;">
+                        ${formatDate(track.startTime)} • ${(track.distance).toFixed(2)} km • ${track.points.length} points
+                    </div>
+                `;
+                
+                trackItem.addEventListener('click', () => {
+                    document.querySelectorAll('#tracks-list .list-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    trackItem.classList.add('active');
+                    document.getElementById('show-track').disabled = false;
+                    document.getElementById('hide-track').disabled = false;
+                    document.getElementById('delete-track').disabled = false;
+                });
+                
+                tracksList.appendChild(trackItem);
+            });
+        }
+        
+        function updateGeofencesList() {
+            const geofencesList = document.getElementById('geofences-list');
+            
+            if (geofences.length === 0) {
+                geofencesList.innerHTML = '<div class="list-item">No geofences saved</div>';
+                document.getElementById('show-geofence').disabled = true;
+                document.getElementById('hide-geofence').disabled = true;
+                document.getElementById('delete-geofence').disabled = true;
+                return;
+            }
+            
+            geofencesList.innerHTML = '';
+            geofences.forEach(geofence => {
+                const geofenceItem = document.createElement('div');
+                geofenceItem.className = 'list-item';
+                geofenceItem.dataset.id = geofence.id;
+                geofenceItem.innerHTML = `
+                    <div>${geofence.name}</div>
+                    <div style="font-size: 0.8rem; color: #666;">
+                        Type: ${geofence.type}
+                    </div>
+                `;
+                
+                geofenceItem.addEventListener('click', () => {
+                    document.querySelectorAll('#geofences-list .list-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    geofenceItem.classList.add('active');
+                    document.getElementById('show-geofence').disabled = false;
+                    document.getElementById('hide-geofence').disabled = false;
+                    document.getElementById('delete-geofence').disabled = false;
+                });
+                
+                geofencesList.appendChild(geofenceItem);
+            });
+        }
+        
+        function showTrackOnMap(track) {
+            if (!track.visible && track.polyline) {
+                map.addLayer(track.polyline);
+                track.visible = true;
+                
+                // Fit map to track bounds
+                const bounds = L.latLngBounds(track.points.map(p => [p.lat, p.lng]));
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+        
+        function hideTrackFromMap(trackId) {
+            const track = savedTracks.find(t => t.id === trackId);
+            if (track && track.visible && track.polyline) {
+                map.removeLayer(track.polyline);
+                track.visible = false;
+            }
+        }
+        
+        function deleteTrack(trackId) {
+            const trackIndex = savedTracks.findIndex(t => t.id === trackId);
+            if (trackIndex !== -1) {
+                const track = savedTracks[trackIndex];
+                if (track.visible && track.polyline) {
+                    map.removeLayer(track.polyline);
+                }
+                savedTracks.splice(trackIndex, 1);
+                updateTracksList();
+            }
+        }
+        
+        function showGeofenceOnMap(geofence) {
+            if (!geofence.visible && geofence.layer) {
+                drawnItems.addLayer(geofence.layer);
+                geofence.visible = true;
+                
+                // Fit map to geofence
+                if (geofence.type === 'circle') {
+                    map.fitBounds(geofence.layer.getBounds(), { padding: [50, 50] });
+                } else if (geofence.type === 'polygon' || geofence.type === 'rectangle') {
+                    map.fitBounds(geofence.layer.getBounds(), { padding: [50, 50] });
+                }
+            }
+        }
+        
+        function hideGeofenceFromMap(geofenceId) {
+            const geofence = geofences.find(g => g.id === geofenceId);
+            if (geofence && geofence.visible && geofence.layer) {
+                drawnItems.removeLayer(geofence.layer);
+                geofence.visible = false;
+            }
+        }
+        
+        function deleteGeofence(geofenceId) {
+            const geofenceIndex = geofences.findIndex(g => g.id === geofenceId);
+            if (geofenceIndex !== -1) {
+                const geofence = geofences[geofenceIndex];
+                if (geofence.visible && geofence.layer) {
+                    drawnItems.removeLayer(geofence.layer);
+                }
+                geofences.splice(geofenceIndex, 1);
+                updateGeofencesList();
+            }
+        }
+        
+        function checkGeofenceAlerts(lat, lng) {
+            geofences.forEach(geofence => {
+                if (!geofence.visible) return;
+                
+                let isInside = false;
+                
+                if (geofence.type === 'circle') {
+                    const distance = map.distance([lat, lng], [geofence.center.lat, geofence.center.lng]);
+                    isInside = distance <= geofence.radius;
+                } else if (geofence.type === 'polygon' || geofence.type === 'rectangle') {
+                    isInside = isPointInPolygon([lat, lng], geofence.points);
+                }
+                
+                if (isInside && !geofence.alerted) {
+                    showGeofenceAlert(geofence.name);
+                    geofence.alerted = true;
+                } else if (!isInside && geofence.alerted) {
+                    geofence.alerted = false;
+                }
+            });
+        }
+        
+        function showGeofenceAlert(geofenceName) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert';
+            alertDiv.textContent = `Entered geofence: ${geofenceName}`;
+            
+            document.querySelector('.main-content').insertBefore(alertDiv, document.querySelector('.map-container'));
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
+        }
+        
+        // Utility functions
+        function calculateTrackDistance(points) {
+            if (points.length < 2) return 0;
+            
+            let distance = 0;
+            for (let i = 1; i < points.length; i++) {
+                distance += map.distance(
+                    [points[i-1].lat, points[i-1].lng],
+                    [points[i].lat, points[i].lng]
+                );
+            }
+            
+            return distance / 1000; // Convert to kilometers
+        }
+        
+        function formatDuration(ms) {
+            const seconds = Math.floor((ms / 1000) % 60);
+            const minutes = Math.floor((ms / (1000 * 60)) % 60);
+            const hours = Math.floor(ms / (1000 * 60 * 60));
+            
+            return [
+                hours.toString().padStart(2, '0'),
+                minutes.toString().padStart(2, '0'),
+                seconds.toString().padStart(2, '0')
+            ].join(':');
+        }
+        
+        function formatDate(timestamp) {
+            const date = new Date(timestamp);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        }
+        
+        function calculateHeading(lat1, lon1, lat2, lon2) {
+            const toRad = (value) => value * Math.PI / 180;
+            const toDeg = (value) => value * 180 / Math.PI;
+            
+            const dLon = toRad(lon2 - lon1);
+            const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+            const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+            
+            let heading = toDeg(Math.atan2(y, x));
+            return (heading + 360) % 360;
+        }
+        
+        function generateCircularRoute(centerLat, centerLng, radius, points) {
+            const route = [];
+            for (let i = 0; i < points; i++) {
+                const angle = (i / points) * 2 * Math.PI;
+                const lat = centerLat + radius * Math.cos(angle);
+                const lng = centerLng + radius * Math.sin(angle);
+                route.push({ lat, lng });
+            }
+            return route;
+        }
+        
+        function isPointInPolygon(point, polygon) {
+            // Ray casting algorithm
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].lat, yi = polygon[i].lng;
+                const xj = polygon[j].lat, yj = polygon[j].lng;
+                
+                const intersect = ((yi > point[1]) !== (yj > point[1])) &&
+                    (point[0] < (xj - xi) * (point[1] - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+    </script>
+</body>
+</html>
